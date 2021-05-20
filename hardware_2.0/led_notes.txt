@@ -1,0 +1,26 @@
+We have a total of 5 added LEDs.
+
+Our blue LED D8 will be powered by the battery at 4.2 V. It is always on.
+forward voltage: 2.9 V
+Current limiting resistor: 64.9 ohms
+LED current: 0.02 A
+
+Our green LED D7 will be powered by the battery at 4.2 V. It wired to a MOSFET to blink at a programmed throttle position.
+forward voltage: 2.1 V
+Current limiting resistor: 69.8 ohms
+LED current: 0.03 A
+
+Our yellow LED D11 will be powered by the battery at 4.2 V. It wired to a MOSFET to blink at a programmed throttle position.
+forward voltage: 1.85 V
+Current limiting resistor: 80.6 ohms
+LED current: 0.029 A
+
+Our orange LED D10 will be powered by the battery at 4.2 V. It wired to a MOSFET to blink at a programmed throttle position.
+forward voltage: 1.8 V
+Current limiting resistor: 80.6 ohms
+LED current: 0.03 A
+
+Our red LED D9 will be powered by the battery at 4.2 V. It wired to a MOSFET to blink at a programmed throttle position.
+forward voltage: 2.0 V
+Current limiting resistor: 69.8 ohms
+LED current: 0.032 A

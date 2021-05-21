@@ -73,24 +73,31 @@ Adafruit_LSM9DS1 lsm = Adafruit_LSM9DS1();
 // lib file     | instance name | instance name for parameter pointers
 Adafruit_Simple_AHRS ahrs(&lsm.getAccel(), &lsm.getMag(), &lsm.getGyro());
 
-void setupSensorTunedDefault()
-{
-  // Set data rate for G and XL.  Set G low-pass cut off.  (Section 7.12)
-  lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG1_G,  ODR_119 | G_BW_G_11 );
-  //lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG2_G,  B00000000); // disable LPF2.  THis seems to help with noise, but I'm not sure why.
+void setupLSM(){ // set up our instance of the sensor with the wanted register values
+    // GYRO [first register]   // Set data rate for G and XL.  Set G low-pass cut off.  (Section 7.12)
+    lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG1_G,  ODR_119 | G_BW_G_11 );
 
-  // Enable the XL (Section 7.23)
-  lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG5_XL, XL_ENABLE_X | XL_ENABLE_Y | XL_ENABLE_Z);
-
-  // Set low-pass XL filter frequency divider (Section 7.25)
-  lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG7_XL, HR_MODE | XL_LP_ODR_RATIO_100);
+    // Enable the accelerometer X,Y,Z directions (Section 7.23)
+    lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG5_XL, XL_ENABLE_X | XL_ENABLE_Y | XL_ENABLE_Z);
+   
+    // GYRO [second register]
+    lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG2_G,  G_OUTSEL_HP );
+    //lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG2_G,  G_OUTSEL_RAW ); //0.0 added
   
+    // GYRO [third register]
+    lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG3_G, G_HP_CUT_0000 | G_HP_EN ); 
 
-  // This only sets range of measurable values for each sensor.  Setting these manually (I.e., without using these functions) will cause incorrect output from the library.
-  lsm.setupAccel(Adafruit_LSM9DS1::LSM9DS1_ACCELRANGE_2G);
-  lsm.setupMag(Adafruit_LSM9DS1::LSM9DS1_MAGGAIN_4GAUSS);
-  lsm.setupGyro(Adafruit_LSM9DS1::LSM9DS1_GYROSCALE_2000DPS);
+    // Set low-pass XL filter frequency divider (Section 7.25)
+    lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG7_XL, HR_MODE | XL_LP_ODR_RATIO_9 );
+    //lsm.write8(XGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG7_XL, HR_MODE | XL_LP_ODR_RATIO_50 ); //0.0 replaced
+ 
+    // Magnotometer third register. Enable mag continuous (Section 8.7)
+    lsm.write8(MAGTYPE, Adafruit_LSM9DS1::LSM9DS1_REGISTER_CTRL_REG3_M, B00000000);
 
+    // Set up acc, gyro, mag ranges to stop clipping
+    lsm.setupAccel(Adafruit_LSM9DS1::LSM9DS1_ACCELRANGE_2G); // 2, 4, 6, 8, or 16 Gs
+    lsm.setupMag(Adafruit_LSM9DS1::LSM9DS1_MAGGAIN_4GAUSS);  // 2, 4, 6, 8, or 16 Gauss
+    lsm.setupGyro(Adafruit_LSM9DS1::LSM9DS1_GYROSCALE_2000DPS); // 245, 500, or 2000 DPS
 }
 
 /*--------------------

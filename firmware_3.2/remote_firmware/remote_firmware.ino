@@ -1,50 +1,47 @@
 #include "quad_remote.h"   // Custom CSE 176e library for the remote
 #include "radio.h"         // Radio library. Modified to include data structure sent via radio
-#include <Arduino.h>       // For some useful functions
-#include <EEPROM.h>        // To save to the Remote RAM
+#include <EEPROM.h>        // To save PID and trim calibration values to Non-volatile memory
 #include <RotaryEncoder.h> // To use the knob and button
 
-#define RADIO_CH 17 // Radio Channel
-#define MAX_TRIM_ANGLE 30 //maximum trim angle
-#define TRIM_INCREMENT 10 // increment by which trim is changed on remote
+#define RADIO_CH 17 ///< Radio Channel
+#define MAX_TRIM_ANGLE 30 ///< Maximum trim angle
+#define TRIM_INCREMENT 10 ///< Increment by which trim is changed on remote
 
 /*------------------
  * Section 1:
- * Declare variables
+ * Declare global variables
  * -----------------*/
 
-//Structure for radio data. Struct "Data" initialized in radio.h
-struct Data remoteToQuadData;
+struct Data remoteToQuadData; ///< Structure for radio data. Struct "Data" initialized in radio.h
 
 // Raw gimbal values. Organized as:
 // [0] = A2 = pitch; [1] = A3 = roll; [2] = A1 = yaw; [3] = A0 = throt 
-int gimbalRawValues[4];  // values read by gimbal. Nominally 0 - 1024 but constrained by the potentiometer
-int lowestGimbalValueReadSoFar[4]   = {  0,   0,   0,   0}; // lowest value possible by analog stick gimbal
-int largestGimbalValueReadSoFar[4]  = {303, 318, 320, 306}; // highest value possible by analog stick gimbal
-int saveLargestGimbalValuesSoFar[12];// 255 + 255 + 255 = 765 is the highest save value with EEPROM for gimbal
+int gimbalRawValues[4];  ///< Values read by gimbal. Nominally 0 - 1024 but constrained by the potentiometer
+int lowestGimbalValueReadSoFar[4]   = {  0,   0,   0,   0}; ///< lowest value possible by analog stick gimbal
+int largestGimbalValueReadSoFar[4]  = {303, 318, 320, 306}; ///< highest value possible by analog stick gimbal
+int saveLargestGimbalValuesSoFar[12]; ///< 255 + 255 + 255 = 765 is the highest save value with EEPROM for gimbal
 
 // Values for rotary knob and its button
-void knobPressed(bool);
-void knobsUpdate();
-bool knob_btn = 0;
+void knobPressed(bool); // Keeps track of the knob button
+void knobsUpdate(); // Keeps track of the rotary knob value
+bool knob_btn = 0; ///< Whether the knob button is pressed
 
 // States of the remote
-bool armToken = true;
-bool isInTrimMode = false;
+bool armToken = true;  ///< State variable for armed mode
+bool isInTrimMode = false; ///< State variable for trim mode
 
 // Variables for PID tuning and displaying values over LCD screen
-int  cpa [3][6]; // Coefficients Properties Array for displaying and storing PID coefficients for pitch, yaw, roll. 3 rows, 6 columns
-int  sign[9] = {1,1,1,  1,1,1,  1,1,1};  //Sign of PID tuning coefficients for storing via EEPROM
-int  PIDpos = 0; 
-bool changeLeft = 1;
-int row = 0;
-int col = 0;
+int  cpa [3][6]; ///< Coefficients Properties Array for displaying and storing PID coefficients for pitch, yaw, roll. 3 rows, 6 columns
+int  sign[9] = {1,1,1,  1,1,1,  1,1,1};  ///< Sign of PID tuning coefficients for storing via EEPROM
+int  PIDpos = 0; ///< PID value being tuned currently
+bool changeLeft = 1; ///< Keeps track of whether we are tuning whole integer or decimal PID value
+int row = 0;  ///< LCD screen row to write to
+int col = 0;  ///< LCD screen column to write to
 int calculateColPos(int , bool  );
-int timesOverflowed = 0;
-float trimAngle[2];
-String top = "";
-int colPosStart[3];
-bool knob_token = false;
+float trimAngle[2]; ///< Trim pitch and roll angles
+String top = ""; ///< Initialize string to print on top row of LCD screen for PID tuning
+int colPosStart[3]; ///< What column we are writing to LCD screen for PID tuning
+bool knob_token = false; ///< trim or PID tuning variable
 void updateDisplayPIDElementChange();
 
 //Variables for converting integers to decimal. Integers may be saved on EEPROM, while float values are sent over radio.
@@ -52,15 +49,20 @@ void converToDecimalsBeforeSend();
 float castIntPairToDecimal( int, int);
 
 // Variables and function declarations for reading and writing to EEPROM.
-void readPIDArrayFromEeprom();
+void readPIDArrayFromEeprom(int);
 void writePIDToEeprom();  // send current PID values to EEPROM
 void writeGimbalsToEeprom(); // send calibrated gimbal values to EEPROM
-int saveLastTuneVal = 0;
+int timesOverflowed = 0; ///< Keeps track of times an integer has overflowed for EEPROM writing
 
 /*------------------
  * Section 2:
  * Set up remote
  * -----------------*/
+
+/**
+ * Setup the remote firmware by initializing radio, gimbal pins, LCD screen, 
+ * knobs and buttons, and reading PID and trim values from EEPROM.
+ */
 
 void setup() {
     Serial.begin(9600);              // set up serial
@@ -82,6 +84,12 @@ void setup() {
  * Loop
  * -----------------*/
 
+/**
+ * Loop endlessly. Read gimbal positions, determine if quadcopter should be armed, 
+ * determine which LCD tuning state the remote should be in, determine whether the user is inputing commands, and
+ * send data structure to quadcopter over radio.
+ */
+
 void loop() {
     readAndMapGimbals();            // Read raw gimbal values
     isInArmState(remoteToQuadData); // Are we arming the quadcopter right now?
@@ -100,12 +108,11 @@ void loop() {
  * Function PIDTuningState
  * --------------------------*/
 
+/**
+* This function serves as a state machine. It is called when the remote is in the PID editing state
+*/
+
 void PIDTuningState(){
-    /*
-    * This function serves as a state machine. It is called when the remote is in the PID editing state
-    * Inputs:  None
-    * Outputs: None
-    */
     if( digitalRead(BUTTON_DOWN_PIN)!=HIGH ){                         // Command to save PID values
         knob_btn = true;
         delay(1000);
@@ -177,12 +184,11 @@ void PIDTuningState(){
  * Function TrimTuningState
  * --------------------------*/
 
+/**
+* This function serves as a state machine. It is called when the remote is in the Trim editing state
+*/
+
 void TrimTuningState(){
-    /*
-    * This function serves as a state machine. It is called when the remote is in the Trim editing state
-    * Inputs:  None
-    * Outputs: None
-    */
     if (armToken && remoteToQuadData.arm == 1){ // if we want to arm, do it
         armToken = false;
         updateDisplayTrimElementChange(); // Display "A" on LCD screen to show user quad is armed
@@ -275,14 +281,12 @@ void TrimTuningState(){
  * Function updateDisplayTrimElementChange
  * --------------------------*/
 
+/**
+* Updates the entire LCD screen to the tuning state.
+* It should be called when an element changes on the LCD screen.
+*/
+
 void updateDisplayTrimElementChange(){
-    /*
-    * This function updates the entire LCD screen to the tuning state.
-    * It should be called when an element changes on the LCD screen.
-    * 
-    * Inputs:  None
-    * Outputs: None
-    */
     calculateTuningValues(); // Calculate the tuning values displayed and sent to the quad (float) from the values saved to EEPROM (int)
     lcd.clear();
     lcd.print("TRIM:ROLL:");
@@ -316,14 +320,12 @@ void updateDisplayTrimElementChange(){
  * Function calculateTuningValues
  * --------------------------*/
 
+/**
+* Calculates the tuning values displayed and sent to the quad (float) 
+* from the values saved to EEPROM (int)
+*/
+
 void calculateTuningValues(){
-    /*
-    * This function calculates the tuning values displayed and sent to the quad (float) 
-    * from the values saved to EEPROM (int)
-    * 
-    * Inputs:  None
-    * Outputs: None
-    */
     if(remoteToQuadData.pitchTrimSign){ // if pitch is negative
         trimAngle[0] = -float(remoteToQuadData.pitchTrimMagnitude) * (float(MAX_TRIM_ANGLE) / 255);
         }
@@ -343,12 +345,11 @@ void calculateTuningValues(){
  * Function readAndMapGimbals
  * --------------------------*/
 
+/**
+* Reads the analog gimbal positions and map to a value which may be sent over radio
+*/
+
 void readAndMapGimbals(){
-    /*
-    * Read the analog gimbal positions and map to a value which may be sent over radio
-    * Inputs:  None
-    * Outputs: None
-    */
     // [0] = A2 = pitch; [1] = A3 = roll; [2] = A1 = yaw; [3] = A0 = throt; 
     //A0 A2 A1 A3. throt at 0, pitch at 0. Also if throt low, roll to zero kills throt (and pitch)
     //A0 A2 A3 A1. throt at 0, pitch at 0. Also if throt low, yaw to zero kills throt (and pitch)
@@ -376,12 +377,12 @@ void readAndMapGimbals(){
  * Function isInArmState
  * --------------------------*/
 
+/**
+* Arms the quadcopter if the gimbals are down and out
+* @param  &d pointer to the the data structure containing throttle being sent via radio to the quadcopter
+*/
+
 void isInArmState(Data& d){
-    /*
-    * Arm the quadcopter if the gimbals are down and out
-    * Inputs:  d: pointer to the the data structure containing throttle being sent via radio to the quadcopter
-    * Outputs: None
-    */
     if ((d.yaw <= 0) && (d.pitch >= 250) && (d.roll <= 0) && (d.throt <= 0 )){
         d.arm = 1; 
         }
@@ -392,13 +393,12 @@ void isInArmState(Data& d){
  * Function calibrate
  * --------------------------*/
 
+/**
+* Calibrates the gimbals and call function writeGimbalsToEeprom to save the new values.
+* Scripted and hardcoded out of necessity.
+*/
+
 void calibrate() {
-    /*
-    * Calibrate the gimbals and call function writeGimbalsToEeprom to save the new values.
-    * Scripted and hardcoded out of necessity.
-    * Inputs:  None
-    * Outputs: None
-    */
     lcd.clear();
     lcd.print("calibrating...  ");
     delay(2000);
@@ -437,13 +437,13 @@ void calibrate() {
  * Function calculateColPos
  * --------------------------*/
 
+/**
+* Determines which cpa array column value we wish to edit
+* @param pidPos 0->2: Pitch, Roll, Yaw
+* @param tuningWholeInteger Whether we are tuning an integer or decimal
+*/
+
 int calculateColPos(int pidPos, bool tuningWholeInteger ){
-    /*
-    * Determine which cpa array column value we wish to edit
-    * Inputs:  pidPos: 0->2: Pitch, Roll, Yaw
-    *          tuningWholeInteger: Whether we are tuning an integer or decimal
-    * Outputs: None
-    */
     if( tuningWholeInteger ){ // if we are tuning a whole integer
         col = pidPos*2 + 0;
         }
@@ -458,14 +458,13 @@ int calculateColPos(int pidPos, bool tuningWholeInteger ){
  * Function updateDisplayPIDElementChange
  * ---------------------------------*/
 
+/**
+* Updates the entire LCD screen to the PID state.
+* It should be called when an element changes on the LCD screen.
+* For example: arming the controller or changing which pitch, roll, or yaw PID value is being tuned.
+*/
+
 void updateDisplayPIDElementChange(){
-    /*
-    * This function updates the entire LCD screen to the PID state.
-    * It should be called when an element changes on the LCD screen.
-    * For example: arming the controller or changing which pitch, roll, or yaw PID value is being tuned.
-    * Inputs:  None
-    * Outputs: None
-    */
     int left, right;
     if( col % 2 == 0){                                  // if tuning a whole integer
         left  = cpa[row][col];
@@ -559,13 +558,12 @@ void updateDisplayPIDElementChange(){
  * Function updateDisplayPIDNumChange
  * ---------------------------------*/
 
+/**
+* Updates the numbers being displayed currently on the LCD screen.
+* It should be called when a number changes.
+*/
+
 void updateDisplayPIDNumChange(){
-    /*
-    * This function updates the numbers being displayed currently on the LCD screen.
-    * It should be called when a number changes.
-    * Inputs:  None
-    * Outputs: None
-    */
     int left, right;
     if( col % 2 == 0){ // if tuning a whole integer
         left  = cpa[row][col];
@@ -628,13 +626,12 @@ void updateDisplayPIDNumChange(){
  * Function convertToDecimalBeforeSend
  * ---------------------------------*/
 
+/**
+* Takes the PID user input as displayed on the LCD (as unsigned integers) and saves it in the structure "remoteToQuadData" (as floats), 
+* which will be sent over radio to the quadcopter. It also stores the sign of the PID values for EEPROM saving
+*/
+
 void converToDecimalsBeforeSend(){
-    /*
-    * This function Takes the PID user input as displayed on the LCD (as unsigned integers) and saves it in the structure "remoteToQuadData" (as floats), 
-    * which will be sent over radio to the quadcopter. It also stores the sign of the PID values for EEPROM saving
-    * Inputs:  None
-    * Outputs: None
-    */
     for (int i=0; i<3; i++){ // pitch, yaw, roll
         remoteToQuadData.coefficientsContainer[i].proportional = castIntPairToDecimal(cpa[i][0], cpa[i][1]); // save P val as float
         if(  remoteToQuadData.coefficientsContainer[i].proportional < 0){ // save sign
@@ -665,14 +662,15 @@ void converToDecimalsBeforeSend(){
  * Function castIntPairToDecimal
  * ---------------------------------*/
 
-float castIntPairToDecimal( int left_int, int right_int){
-    /*
-    * This function takes the separated PID integers displayed on the LCD 
+    /**
+    * Takes the separated PID integers displayed on the LCD 
     * and combines them into one float value
-    * Inputs:  left_int: integer in the ones place on the LCD screen
-    *          right_int: integer in the decimal place on the LCD screen
-    * Outputs: castedPIDValue: float value which may be used in computation
+    * @param left_int integer in the ones place on the LCD screen
+    * @param right_int integer in the decimal place on the LCD screen
+    * @return castedPIDValue float value which may be used in computation
     */
+
+float castIntPairToDecimal( int left_int, int right_int){
     float castedDecimal = (float)right_int;
     float denominator = 1000.000; // allows after decimal to be precise up to the thousands place.
     float castedPIDValue;
@@ -693,12 +691,12 @@ float castIntPairToDecimal( int left_int, int right_int){
  * Function knobPressed
  * ---------------------------------*/
 
+/**
+* Resets the current displayed PID or trim values
+* @param  down the boolean which stores whether the knob is pressed
+*/
+
 void knobPressed(bool down) {
-    /*
-    * This function resets the current displayed PID or trim values
-    * Inputs:  down: the boolean which stores whether the knob is down
-    * Outputs: None
-    */
     if((down) && (!isInTrimMode)) {             // if editing PID values
         cpa[row][col] = knob1.setCurrentPos(0); // reset the quantity to zero
         updateDisplayPIDNumChange();            // reflect update on screen
@@ -716,12 +714,11 @@ void knobPressed(bool down) {
  * Function knobsUpdate
  * ---------------------------------*/
 
+/**
+* Updates the stored knob value so that it agrees with the stored PID value displayed on the LCD screen
+*/
+
 void knobsUpdate(){
-    /*
-    * Updates the stored knob value so that it agrees with the stored PID value displayed on the LCD screen
-    * Inputs:  None
-    * Outputs: None
-    */
     if(!isInTrimMode){
         if(knob_token){ // update to stored PID value if the screen is changed
             knob1.setCurrentPos( cpa[row][col]);
@@ -737,12 +734,11 @@ void knobsUpdate(){
  * Function eepromRead
  * ---------------------------------*/
 
+/**
+* Read the values stored in EEPROM and store in a data structure
+*/
+
 void eepromRead(){
-    /*
-    * Read the values stored in EEPROM and store in a data structure
-    * Inputs:  None
-    * Outputs: None
-    */
     int AddressNumForEEPROM = 0;
     for(int index = 0; index < 4; index++){ // 0->3: Lowest calibrated gimbal values
         lowestGimbalValueReadSoFar[index] = EEPROM.read(AddressNumForEEPROM);
@@ -788,12 +784,12 @@ void eepromRead(){
  * Function readPIDArrayFromEeprom
  * ---------------------------------*/
 
+/**
+* Reads the PID values stored in EEPROM
+* @param  currentEEPROMAdressNumber: necessary to read correct data
+*/
+
 void readPIDArrayFromEeprom(int currentEEPROMAddressNumber){
-    /*
-    * This function reads the PID values stored in EEPROM
-    * Inputs:  currentEEPROMAdressNumber: necessary to read correct data
-    * Outputs: None
-    */
     for(int r = 0;  r < 3; r++){
         for(int c = 0; c < 6; c++){ // Address: 16 -> 33
             cpa[r][c] = EEPROM.read(currentEEPROMAddressNumber) + EEPROM.read(currentEEPROMAddressNumber + 1) + 
@@ -813,12 +809,12 @@ void readPIDArrayFromEeprom(int currentEEPROMAddressNumber){
  * Function readTrimFromEeprom
  * ---------------------------------*/
 
+/**
+* Reads the trim values stored in EEPROM
+* @param EepromAddress eeprom address to read correct data (should be at 43)
+*/
+
 void readTrimFromEeprom(int EepromAddress){
-    /*
-    * This function reads the trim values stored in EEPROM
-    * Inputs:  EepromAddress: necessary to read correct data (should be at 43)
-    * Outputs: None
-    */
     remoteToQuadData.pitchTrimSign = EEPROM.read(EepromAddress);
     remoteToQuadData.pitchTrimMagnitude = EEPROM.read(EepromAddress+1);
     remoteToQuadData.rollTrimSign = EEPROM.read(EepromAddress+2);
@@ -830,12 +826,11 @@ void readTrimFromEeprom(int EepromAddress){
  * Function writeGimbalsToEeprom
  * ---------------------------------*/
 
+/**
+* Saves the calibrated gimbal values to the microcontroller's EEPROM
+*/
+
 void writeGimbalsToEeprom(){
-    /*
-    * This function saves the calibrated gimbal values to the microcontroller's EEPROM
-    * Inputs:  None
-    * Outputs: None
-    */
     int AddressNumForEEPROM = 0; // first address where values are stored
     for(int index = 0; index < 4; index++){ // 0 -> 3
         EEPROM.write(AddressNumForEEPROM, lowestGimbalValueReadSoFar[index]);
@@ -876,12 +871,11 @@ void writeGimbalsToEeprom(){
  * Function writePIDToEeprom
  * ---------------------------------*/
 
+/**
+* Saves the PID and trim coefficients to the microcontroller's EEPROM
+*/
+
 void writePIDToEeprom(){
-    /*
-    * This function saves the PID and trim coefficients to the microcontroller's EEPROM
-    * Inputs:  None
-    * Outputs: None
-    */
     int AddressNumForEEPROM = 16; // first address at which values may be stored
     float storeValue = 0.00;
     for(int r = 0;  r < 3; r++){ // Pitch, Yaw, Roll
@@ -942,12 +936,11 @@ void writePIDToEeprom(){
  * Function readCoefficientValuesAndSigns
  * ------------------------------------*/
 
+/**
+* Resets all PID coefficients.
+*/
+
 void resetCoefficientValuesAndSigns(){
-    /*
-    * This function resets all PID coefficients.
-    * Inputs:  None
-    * Outputs: None
-    */
     for(int i = 0; i < 3; i++){
         for(int j = 0; j < 6; j++){
             cpa[i][j] = 0; // reset all PID values
@@ -963,12 +956,11 @@ void resetCoefficientValuesAndSigns(){
  * Function initializeButtonPins
  * ------------------------------------*/
 
+/**
+* Initializes all buttons on the remote
+*/
+
 void initializeButtonPins(){
-    /*
-    * This function initializes all buttons on the remote
-    * Inputs:  None
-    * Outputs: None
-    */
     pinMode(BUTTON_UP_PIN, INPUT);
     pinMode(BUTTON_DOWN_PIN, INPUT);
     pinMode(BUTTON_LEFT_PIN, INPUT);

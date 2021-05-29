@@ -9,4 +9,4 @@ For more information, please see:
 
 ![orientation](./hardware_2.0/IMAGES/orientation.png)
 
-![remote](.hardware_2.0/IMAGES/remote.png)
+![remote](./hardware_2.0/IMAGES/remote.png)

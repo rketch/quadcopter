@@ -1,5 +1,5 @@
-# quadcopter
-The quadcopter hardware and software made in UCSD class CSE 176e: Robotic System Design and Implementation. Made with Thomas Stuart.
+# When Pigs Fly: The Quadcopter Project
+The hardware and firmware for a quadcopter were made in the UCSD class CSE 176e: Robotic System Design and Implementation with @ThomasStuart.
 
 For more information, please see:
 

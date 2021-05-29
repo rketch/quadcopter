@@ -7,4 +7,4 @@ Created by ![@rketch](https://github.com/rketch) and ![@ThomasStuart](https://gi
 Libraries created by ![@stevenjswanson](https://github.com/stevenjswanson).
 
 ## Doxygen LaTeX Output
-[![doxygen pdf](/IMAGES/doxygen_first_page.jpg)](./doxygen_linked.pdf)
+[![doxygen pdf](/IMAGES/doxygen_first.jpg)](./doxygen_linked.pdf)

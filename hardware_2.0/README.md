@@ -6,7 +6,7 @@ Created by ![@rketch](https://github.com/rketch) and ![@ThomasStuart](https://gi
 Libraries created by ![@stevenjswanson](https://github.com/stevenjswanson).
 
 ## Schematic
-![photo](./IMAGES/schematic_black.png)
+![photo](/IMAGES/schematic_black.png)
 
 ## Layout
-![photo](./IMAGES/layout.png)
+![photo](/IMAGES/layout.png)

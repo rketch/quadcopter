@@ -16,7 +16,7 @@ Four bladed propellers with IMU breakout board
 ![four rotor](./hardware_2.0/IMAGES/four_rotor.jpg)
 
 Remote PID control system tuning menu
-![remote PID](./hardware_2.0/IMAGES/pid tuning.jpg)
+![remote PID](./hardware_2.0/IMAGES/pid_tuning.jpg)
 
 Remote trim tuning menu
 ![remote trim](./hardware_2.0/IMAGES/remote.jpg)

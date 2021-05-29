@@ -7,6 +7,6 @@ For more information, please see:
 
 [-A report detailing the design process of the quadcopter circuit schematic, PCB layout, C++ Arduino firmware, IMU filtering, and control system used to fly the quadcopter.](./Quadcopter_Report.pdf)
 
-![orientation](./hardware_2.0/IMAGES/orientation.png)
+![orientation](./hardware_2.0/IMAGES/orientation.jpg)
 
-![remote](./hardware_2.0/IMAGES/remote.png)
+![remote](./hardware_2.0/IMAGES/remote.jpg)
